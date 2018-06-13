@@ -164,7 +164,7 @@ if __name__ == '__main__':
 
     ###
     sort = resp.argsort()[::-1]
-    resp = resp[sort]/resp.sum()
+    resp = 1.*resp[sort]/resp.sum()
     subtype = (subtype[iarch])[sort]
     flux = (flux[iarch,:])[sort]
     flux /= np.median(flux,axis=1)[:,None]
