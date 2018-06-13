@@ -84,7 +84,7 @@ def get_stars(nb,wave,seed,SDSS_stellar_templates):
         import matplotlib.pyplot as plt
         w = 10.**(np.asarray(head['COEFF0'] + head['COEFF1']*np.arange(flux.shape[1])))
         for s in range(flux.shape[0]):
-            subtype = head['NAME'+str(s)].replace('-','').replace('/','').rstrip()
+            subtype = head['NAME'+str(s)].replace('-','').replace('/','').replace(' ','')
             sizeSubtype = max(sizeSubtype,len(subtype))
             data[subtype] = {}
             data[subtype]['NB'] = 1
