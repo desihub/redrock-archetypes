@@ -1,18 +1,14 @@
-import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
-import fitsio
+#!/usr/bin/env python
 
-import scipy as sp
+import fitsio
+import numpy as np
+import argparse
+import astropy.io.fits as pyfits
 
 from desispec.interpolation import resample_flux
-
-from redrock._zscan import _zchi2_one
-
 from desisim.archetypes import ArcheTypes
 import redrock
-
-path_to_data  = '/uufs/chpc.utah.edu/common/home/sdss07/ebosswork/eboss/spectro/redux/v5_10_10/'
-
+from redrock._zscan import _zchi2_one
 
 def compute_chi2(flux):
     """Compute the chi2 between all the input spectra
@@ -27,77 +23,125 @@ def compute_chi2(flux):
 
     nspec, npix = flux.shape
 
-    chi2 = sp.zeros((nspec, nspec))
-    flux *= sp.sqrt(npix/sp.sum(flux**2,axis=1))[:,None]
+    chi2 = np.zeros((nspec, nspec))
+    flux *= np.sqrt(npix/np.sum(flux**2,axis=1))[:,None]
 
     for ii in range(nspec):
         if ii%50==0: print('Computing chi2 matrix {} over {}'.format(ii,nspec))
-        amp1 = sp.sum(flux[ii]*flux,axis=1)/npix
+        amp1 = np.sum(flux[ii]*flux,axis=1)/npix
         chi2[ii,:] = npix*(1.-amp1**2)
-    sp.fill_diagonal(chi2,0.)
+    np.fill_diagonal(chi2,0.)
 
     return chi2
-def get_spec(plate,mjd,fiber):
+def get_spec(plate,mjd,fiber,in_dir,lmin,lmax):
+    """ Read a SDSS spectrum
 
-    lmin = 3500.
-    lmax = 10000.
+    Args:
+        plate (int): PLATE of observation
+        mjd (int): MJD of observation
+        fiber (int): FIBER_ID of observation
+        in_dir (str): Path to all plate directories
+        lmin (float): Minimum observed wavelength [Angstrom]
+        lmax (float): Maximum observed wavelength [Angstrom]
 
-    path = path_to_data+str(plate)+'/spPlate-' +str(plate)+'-'+str(mjd)+'.fits'
-    cat = pyfits.open(path)
-    objtype = cat[5].data['OBJTYPE'][fiber-1]
-    flux = cat[0].data
-    ivar = cat[1].data
-    end  = cat[2].data
-    h    = cat[4].header
+    Returns:
+        x (array float): Observed wavelength [Angstrom]
+        y (array float): Flux
+        e (array float): inverse variance
 
-    wave = h['CRVAL1'] + h['CD1_1']*sp.arange(h['NAXIS1'])
-    if h['DC-FLAG']:
+    """
+
+    path = in_dir+str(plate)+'/spPlate-' +str(plate)+'-'+str(mjd)+'.fits'
+    h = fitsio.FITS(path)
+    flux = h[0].read()
+    ivar = h['IVAR'].read()
+    end = h['ANDMASK'].read()
+    hdr = h['WAVEDISP'].read_header()
+    h.close()
+
+    wave = hdr['CRVAL1'] + hdr['CD1_1']*np.arange(hdr['NAXIS1'])
+    if hdr['DC-FLAG']:
         wave = 10**wave
-    cat.close()
 
-    cut = (ivar[fiber-1,:]>0.) & (end[fiber-1,:]==0) & (wave>lmin) & (wave<lmax)
-    x = wave[cut]
-    y = flux[fiber-1,:][cut]
-    e = ivar[fiber-1,:][cut]
+    w = (ivar[fiber-1,:]>0.) & (end[fiber-1,:]==0) & (wave>lmin) & (wave<lmax)
+    x = wave[w]
+    y = flux[fiber-1,:][w]
+    e = ivar[fiber-1,:][w]
 
     return x, y, e
 
 
-def main():
+if __name__ == '__main__':
 
-    sp.random.seed(42)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description='Get QSO archetype from PCA fit to real SDSS data')
+
+    parser.add_argument('--out', type=str, default=None, required=True,
+        help = 'Output file name')
+
+    parser.add_argument('--QSO-PCA', type=str, default=None, required=True,
+        help = 'QSO PCA file')
+
+    parser.add_argument('--DRQ', type=str, default=None, required=True,
+        help = 'Catalog of quasar in DR12Q format')
+
+    parser.add_argument('--in-dir', type=str, default=None, required=True,
+        help = 'Path to SDSS data directory')
+
+    parser.add_argument('--nb', type=int, default=1000, required=False,
+        help = 'Number of spectra to generate')
+
+    parser.add_argument('--chi2-thresh', type=float, default=10**2.5, required=False,
+        help = 'Threshold for the chi2')
+
+    parser.add_argument('--seed', type=int, default=42, required=False,
+        help = 'Seed for desisim.templates')
+
+    args = parser.parse_args()
+
+    ###
+    nb_min_pixel = 1000
+    lmin = 3500.
+    lmax = 10000.
 
     ### PCAs
-    path = '/uufs/astro.utah.edu/common/home/u6011908/Programs/desi/code/redrock/py/redrock/templates/rrtemplate-qso.fits'
-    fx = pyfits.open(path)
-    hdr = fx['BASIS_VECTORS'].header
-    wave = sp.asarray(hdr['CRVAL1'] + hdr['CDELT1']*sp.arange(hdr['NAXIS1']) )
+    h = pyfits.open(args.QSO_PCA)
+    hdr = h['BASIS_VECTORS'].header
+    wave = np.asarray(hdr['CRVAL1'] + hdr['CDELT1']*np.arange(hdr['NAXIS1']) )
     if 'LOGLAM' in hdr and hdr['LOGLAM'] != 0:
         wave = 10**wave
-    pca = sp.asarray(fx['BASIS_VECTORS'].data)
+    pca = np.asarray(h['BASIS_VECTORS'].data)
     nbasis = pca.shape[0]
+    h.close()
 
     ###
-    nTot = 3000
-    chi2_thresh = 10**2.5
-    zzcoeff = sp.zeros((nTot,nbasis))
-    flux = sp.zeros((nTot, wave.size))
-    subtype = sp.array(['000']*nTot, dtype='S3')
+    nTot = args.nb
+    zzcoeff = np.zeros((nTot,nbasis))
+    flux = np.zeros((nTot, wave.size))
+    subtype = np.array(['000']*nTot, dtype='S3')
 
     ###
-    path = '/uufs/astro.utah.edu/common/home/u6011908/Data/Catalogs/DR12Q_v2_10.fits'
-    cat = pyfits.open(path)[1].data
+    h = fitsio.FITS(args.DRQ)
+    plate = h[1]['PLATE'][:]
+    mjd = h[1]['MJD'][:]
+    fiber = h[1]['FIBERID'][:]
+    z = h[1]['Z_VI'][:]
+    balFlag = h[1]['BAL_FLAG_VI'][:]
+    h.close()
+
+    ###
+    np.random.seed(args.seed)
     i = 0
-    for k in sp.random.choice(sp.arange(cat.size), size=nTot,replace=False):
-        x, y, e = get_spec(cat['PLATE'][k],cat['MJD'][k],cat['FIBERID'][k])
-        if x.size<1000: continue
-        x /= 1.+cat['Z_VI'][k]
-        Tb = sp.array([ resample_flux(x, wave, pca[j,:]) for j in range(nbasis) ]).transpose()
-        zcoeff = sp.zeros(nbasis)
+    for k in np.random.choice(np.arange(plate.size), size=nTot, replace=False):
+        x, y, e = get_spec(plate[k],mjd[k],fiber[k],args.in_dir,lmin,lmax)
+        if x.size<nb_min_pixel: continue
+        x /= 1.+z[k]
+        Tb = np.array([ resample_flux(x, wave, pca[j,:]) for j in range(nbasis) ]).transpose()
+        zcoeff = np.zeros(nbasis)
         zchi2 = _zchi2_one(Tb, e, y, e*y, zcoeff)
         zzcoeff[i,:] = zcoeff
 
-        if cat['BAL_FLAG_VI'][k]!=0:
+        if balFlag[k]!=0:
             subtype[i] = 'BAL'
         else:
             subtype[i] = ''
@@ -105,17 +149,17 @@ def main():
         i += 1
 
     ###
-    w = (sp.arange(nTot)<i) & (sp.median(flux,axis=1)>0.)
+    w = (np.arange(nTot)<i) & (np.median(flux,axis=1)>0.)
     nTot = w.sum()
     zzcoeff = zzcoeff[w,:]
     flux = flux[w,:]
     subtype = subtype[w]
-    flux /= sp.median(flux,axis=1)[:,None]
+    flux /= np.median(flux,axis=1)[:,None]
 
     ###
     chi2 = compute_chi2(flux)
     Arch = ArcheTypes(chi2)
-    iarch, resp, respindx = Arch.get_archetypes(chi2_thresh=chi2_thresh, responsibility=True)
+    iarch, resp, respindx = Arch.get_archetypes(chi2_thresh=args.chi2_thresh, responsibility=True)
     print('Generated {} archetypes.'.format(iarch.size))
 
     ###
@@ -123,29 +167,19 @@ def main():
     resp = resp[sort]/resp.sum()
     subtype = (subtype[iarch])[sort]
     flux = (flux[iarch,:])[sort]
-    flux /= sp.median(flux,axis=1)[:,None]
-
-    #for i in range(flux.shape[0]):
-    #    plt.plot(wave,flux[i,:])
-    #plt.grid()
-    #plt.show()
+    flux /= np.median(flux,axis=1)[:,None]
 
     ###
     header = [
     {'name':'CRVAL1','value':hdr['CRVAL1'],'comment':'Rest-Frame starting wavelength [Angstroms]'},
     {'name':'CDELT1','value':hdr['CDELT1'],'comment':'Rest-Frame wavelength step'},
-    {'name':'LOGLAM','value':True,'comment':'Wavelength in log lambda'},
+    {'name':'LOGLAM','value':(hdr['LOGLAM']!=0),'comment':'Wavelength in log lambda'},
     {'name':'RRTYPE','value':'QSO','comment':'Spectral type'},
     {'name':'RRVER','value':redrock.__version__,'comment':'Redrock version'},
-    {'name':'SEED','value':42,'comment':'Input seed'},
-    {'name':'NBINPUT','value':nTot,'comment':'Number of generated spectra'},
-    {'name':'CHI2THRE','value':chi2_thresh,'comment':'Chi2 Threshold'},
+    {'name':'SEED','value':args.seed,'comment':'Input seed'},
+    {'name':'NBINPUT','value':args.nb,'comment':'Number of generated spectra'},
+    {'name':'CHI2THRE','value':args.chi2_thresh,'comment':'Chi2 Threshold'},
     ]
-    out = fitsio.FITS('/uufs/astro.utah.edu/common/home/u6011908/Run_programs/desi/redrock/Implemetation_archetypes/qso_3000.fits','rw',clobber=True)
+    out = fitsio.FITS(args.out,'rw',clobber=True)
     out.write([flux.astype('float32'),resp.astype('float32'),subtype],names=['ARCHETYPE','RESP','SUBTYPE'],extname='ARCHETYPES',header=header)
     out.close()
-
-    return
-
-main()
-

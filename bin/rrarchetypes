@@ -70,11 +70,11 @@ def get_stars(nb,wave,seed,SDSS_stellar_templates):
 
     ###
     data['STAR'] = {}
-    data['WD_DA'] = {}
-    data['WD_DB'] = {}
+    data['WD:DA'] = {}
+    data['WD:DB'] = {}
     data['STAR']['NB'] = int(0.5*nb)
-    data['WD_DA']['NB'] = int(0.25*nb)
-    data['WD_DB']['NB'] = nb-data['STAR']['NB']-data['WD_DA']['NB']
+    data['WD:DA']['NB'] = int(0.25*nb)
+    data['WD:DB']['NB'] = nb-data['STAR']['NB']-data['WD:DA']['NB']
 
     ### Read from SDSS stellar templates
     if not SDSS_stellar_templates is None:
@@ -96,10 +96,10 @@ def get_stars(nb,wave,seed,SDSS_stellar_templates):
     data['STAR']['FLUX'], data['STAR']['WAVE'], data['STAR']['META'] = STAR().make_templates(data['STAR']['NB'], restframe=True,seed=tseed)
 
     tseed = seed+data['STAR']['NB']
-    data['WD_DA']['FLUX'], data['WD_DA']['WAVE'], data['WD_DA']['META'] = WD(subtype='DA').make_templates(data['WD_DA']['NB'], restframe=True,seed=tseed)
+    data['WD:DA']['FLUX'], data['WD:DA']['WAVE'], data['WD:DA']['META'] = WD(subtype='DA').make_templates(data['WD:DA']['NB'], restframe=True,seed=tseed)
 
-    tseed = seed+data['STAR']['NB']+data['WD_DA']['NB']
-    data['WD_DB']['FLUX'], data['WD_DB']['WAVE'], data['WD_DB']['META'] = WD(subtype='DB').make_templates(data['WD_DB']['NB'], restframe=True,seed=tseed)
+    tseed = seed+data['STAR']['NB']+data['WD:DA']['NB']
+    data['WD:DB']['FLUX'], data['WD:DB']['WAVE'], data['WD:DB']['META'] = WD(subtype='DB').make_templates(data['WD:DB']['NB'], restframe=True,seed=tseed)
 
     ###
     nTot = np.sum([ data[k]['NB'] for k in list(data.keys()) ])
