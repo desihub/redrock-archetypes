@@ -1,0 +1,151 @@
+import astropy.io.fits as pyfits
+import matplotlib.pyplot as plt
+import fitsio
+
+import scipy as sp
+
+from desispec.interpolation import resample_flux
+
+from redrock._zscan import _zchi2_one
+
+from desisim.archetypes import ArcheTypes
+import redrock
+
+path_to_data  = '/uufs/chpc.utah.edu/common/home/sdss07/ebosswork/eboss/spectro/redux/v5_10_10/'
+
+
+def compute_chi2(flux):
+    """Compute the chi2 between all the input spectra
+
+    Args:
+        flux (float array): Array (nSpec,nPixel) with each spectra on the same
+            wavenlength grid
+    Returns:
+        chi2 (float array): Chi2 (nSpec,nSpec) between all spectra
+
+    """
+
+    nspec, npix = flux.shape
+
+    chi2 = sp.zeros((nspec, nspec))
+    flux *= sp.sqrt(npix/sp.sum(flux**2,axis=1))[:,None]
+
+    for ii in range(nspec):
+        if ii%50==0: print('Computing chi2 matrix {} over {}'.format(ii,nspec))
+        amp1 = sp.sum(flux[ii]*flux,axis=1)/npix
+        chi2[ii,:] = npix*(1.-amp1**2)
+    sp.fill_diagonal(chi2,0.)
+
+    return chi2
+def get_spec(plate,mjd,fiber):
+
+    lmin = 3500.
+    lmax = 10000.
+
+    path = path_to_data+str(plate)+'/spPlate-' +str(plate)+'-'+str(mjd)+'.fits'
+    cat = pyfits.open(path)
+    objtype = cat[5].data['OBJTYPE'][fiber-1]
+    flux = cat[0].data
+    ivar = cat[1].data
+    end  = cat[2].data
+    h    = cat[4].header
+
+    wave = h['CRVAL1'] + h['CD1_1']*sp.arange(h['NAXIS1'])
+    if h['DC-FLAG']:
+        wave = 10**wave
+    cat.close()
+
+    cut = (ivar[fiber-1,:]>0.) & (end[fiber-1,:]==0) & (wave>lmin) & (wave<lmax)
+    x = wave[cut]
+    y = flux[fiber-1,:][cut]
+    e = ivar[fiber-1,:][cut]
+
+    return x, y, e
+
+
+def main():
+
+    sp.random.seed(42)
+
+    ### PCAs
+    path = '/uufs/astro.utah.edu/common/home/u6011908/Programs/desi/code/redrock/py/redrock/templates/rrtemplate-qso.fits'
+    fx = pyfits.open(path)
+    hdr = fx['BASIS_VECTORS'].header
+    wave = sp.asarray(hdr['CRVAL1'] + hdr['CDELT1']*sp.arange(hdr['NAXIS1']) )
+    if 'LOGLAM' in hdr and hdr['LOGLAM'] != 0:
+        wave = 10**wave
+    pca = sp.asarray(fx['BASIS_VECTORS'].data)
+    nbasis = pca.shape[0]
+
+    ###
+    nTot = 3000
+    chi2_thresh = 10**2.5
+    zzcoeff = sp.zeros((nTot,nbasis))
+    flux = sp.zeros((nTot, wave.size))
+    subtype = sp.array(['000']*nTot, dtype='S3')
+
+    ###
+    path = '/uufs/astro.utah.edu/common/home/u6011908/Data/Catalogs/DR12Q_v2_10.fits'
+    cat = pyfits.open(path)[1].data
+    i = 0
+    for k in sp.random.choice(sp.arange(cat.size), size=nTot,replace=False):
+        x, y, e = get_spec(cat['PLATE'][k],cat['MJD'][k],cat['FIBERID'][k])
+        if x.size<1000: continue
+        x /= 1.+cat['Z_VI'][k]
+        Tb = sp.array([ resample_flux(x, wave, pca[j,:]) for j in range(nbasis) ]).transpose()
+        zcoeff = sp.zeros(nbasis)
+        zchi2 = _zchi2_one(Tb, e, y, e*y, zcoeff)
+        zzcoeff[i,:] = zcoeff
+
+        if cat['BAL_FLAG_VI'][k]!=0:
+            subtype[i] = 'BAL'
+        else:
+            subtype[i] = ''
+        flux[i,:] = pca.transpose().dot(zcoeff)
+        i += 1
+
+    ###
+    w = (sp.arange(nTot)<i) & (sp.median(flux,axis=1)>0.)
+    nTot = w.sum()
+    zzcoeff = zzcoeff[w,:]
+    flux = flux[w,:]
+    subtype = subtype[w]
+    flux /= sp.median(flux,axis=1)[:,None]
+
+    ###
+    chi2 = compute_chi2(flux)
+    Arch = ArcheTypes(chi2)
+    iarch, resp, respindx = Arch.get_archetypes(chi2_thresh=chi2_thresh, responsibility=True)
+    print('Generated {} archetypes.'.format(iarch.size))
+
+    ###
+    sort = resp.argsort()[::-1]
+    resp = resp[sort]/resp.sum()
+    subtype = (subtype[iarch])[sort]
+    flux = (flux[iarch,:])[sort]
+    flux /= sp.median(flux,axis=1)[:,None]
+
+    #for i in range(flux.shape[0]):
+    #    plt.plot(wave,flux[i,:])
+    #plt.grid()
+    #plt.show()
+
+    ###
+    header = [
+    {'name':'CRVAL1','value':hdr['CRVAL1'],'comment':'Rest-Frame starting wavelength [Angstroms]'},
+    {'name':'CDELT1','value':hdr['CDELT1'],'comment':'Rest-Frame wavelength step'},
+    {'name':'LOGLAM','value':True,'comment':'Wavelength in log lambda'},
+    {'name':'RRTYPE','value':'QSO','comment':'Spectral type'},
+    {'name':'RRVER','value':redrock.__version__,'comment':'Redrock version'},
+    {'name':'SEED','value':42,'comment':'Input seed'},
+    {'name':'NBINPUT','value':nTot,'comment':'Number of generated spectra'},
+    {'name':'CHI2THRE','value':chi2_thresh,'comment':'Chi2 Threshold'},
+    ]
+    out = fitsio.FITS('/uufs/astro.utah.edu/common/home/u6011908/Run_programs/desi/redrock/Implemetation_archetypes/qso_3000.fits','rw',clobber=True)
+    out.write([flux.astype('float32'),resp.astype('float32'),subtype],names=['ARCHETYPE','RESP','SUBTYPE'],extname='ARCHETYPES',header=header)
+    out.close()
+
+    return
+
+main()
+
