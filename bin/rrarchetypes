@@ -81,7 +81,6 @@ def get_stars(nb,wave,seed,SDSS_stellar_templates):
         h = fitsio.FITS(SDSS_stellar_templates)
         head = h[0].read_header()
         flux = h[0].read()
-        import matplotlib.pyplot as plt
         w = 10.**(np.asarray(head['COEFF0'] + head['COEFF1']*np.arange(flux.shape[1])))
         for s in range(flux.shape[0]):
             subtype = head['NAME'+str(s)].replace('-','').replace('/','').replace(' ','')
