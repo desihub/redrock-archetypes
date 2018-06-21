@@ -79,6 +79,9 @@ if __name__ == '__main__':
     parser.add_argument('--out', type=str, default=None, required=True,
         help = 'Output file name')
 
+    parser.add_argument('--version', type=str, default=None, required=True,
+        help = 'Version number for the archetype')
+
     parser.add_argument('--QSO-PCA', type=str, default=None, required=True,
         help = 'QSO PCA file')
 
@@ -176,6 +179,7 @@ if __name__ == '__main__':
     {'name':'LOGLAM','value':(hdr['LOGLAM']!=0),'comment':'Wavelength in log lambda'},
     {'name':'RRTYPE','value':'QSO','comment':'Spectral type'},
     {'name':'RRVER','value':redrock.__version__,'comment':'Redrock version'},
+    {'name':'VERSION','value':args.version,'comment':'Archetype version'},
     {'name':'SEED','value':args.seed,'comment':'Input seed'},
     {'name':'NBINPUT','value':args.nb,'comment':'Number of generated spectra'},
     {'name':'CHI2THRE','value':args.chi2_thresh,'comment':'Chi2 Threshold'},
