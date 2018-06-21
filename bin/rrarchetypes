@@ -179,6 +179,9 @@ if __name__ == '__main__':
     parser.add_argument('--out', type=str, default=None, required=True,
         help = 'Output file name')
 
+    parser.add_argument('--version', type=str, default=None, required=True,
+        help = 'Version number for the archetype')
+
     parser.add_argument('--nb', type=int, default=1000, required=False,
         help = 'Number of spectra to generate')
 
@@ -223,6 +226,7 @@ if __name__ == '__main__':
     {'name':'RRTYPE','value':args.spectype,'comment':'Spectral type'},
     {'name':'INSPEC','value':os.environ['DESI_BASIS_TEMPLATES'],'comment':'Vector basis'},
     {'name':'RRVER','value':redrock.__version__,'comment':'Redrock version'},
+    {'name':'VERSION','value':args.version,'comment':'Archetype version'},
     {'name':'SEED','value':args.seed,'comment':'Input seed'},
     {'name':'NBINPUT','value':args.nb,'comment':'Number of generated spectra'},
     {'name':'CHI2THRE','value':args.chi2_thresh,'comment':'Chi2 Threshold'},
