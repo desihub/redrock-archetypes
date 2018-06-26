@@ -5,7 +5,7 @@ import numpy as np
 import fitsio
 import argparse
 
-from desisim.templates import ELG, LRG, BGS, STAR, WD
+from desisim.templates import ELG, LRG, BGS, STAR, WD, SIMQSO
 from desispec.interpolation import resample_flux
 from desisim.archetypes import ArcheTypes
 import redrock
@@ -166,6 +166,48 @@ def get_galaxies(nb,wave,seed):
     flux /= np.median(flux,axis=1)[:,None]
 
     return flux, subtype
+def get_quasars(nb,wave,seed):
+    """Get the quasar spectra
+
+    Args:
+        nb (int): Number of spectra
+        wave (float array): Rest-Frame wavelength grid in Angstrom
+    Returns:
+        flux (float array): Each spectra (nSpec,nPixel) on the same
+            wavenlength grid
+        subtype (string array): Subtype of each spectra
+
+    """
+
+    ###
+    data = {}
+
+    ###
+    data['QSO'] = {}
+    data['QSO']['NB'] = nb
+
+    tseed = seed
+    data['QSO']['FLUX'], data['QSO']['WAVE'], data['QSO']['META'] = SIMQSO(restframe=True).make_templates(nmodel=data['QSO']['NB'],
+        zrange=(0., 7.),nocolorcuts=True,seed=tseed, lyaforest=True)
+
+    ###
+    nTot = np.sum([ data[k]['NB'] for k in list(data.keys()) ])
+
+    ### On same grid
+    i = 0
+    flux = np.zeros((nTot, wave.size))
+    subtype = np.array(['00000']*nTot, dtype='S5')
+    for k in list(data.keys()):
+        for j in range(data[k]['NB']):
+            subtype[i] = ''
+            flux[i] = resample_flux(wave, data[k]['WAVE'], data[k]['FLUX'][j])
+            i += 1
+    flux /= np.median(flux,axis=1)[:,None]
+
+    return flux, subtype
+
+
+
 
 
 if __name__ == '__main__':
@@ -174,7 +216,7 @@ if __name__ == '__main__':
         description='Get archetype for the given spectype')
 
     parser.add_argument('--spectype', type=str, default=None, required=True,
-        help = "Spectype: 'STAR' or 'GALAXY'")
+        help = "Spectype: 'STAR' or 'GALAXY' or 'QSO'")
 
     parser.add_argument('--out', type=str, default=None, required=True,
         help = 'Output file name')
@@ -204,6 +246,9 @@ if __name__ == '__main__':
     elif args.spectype=='GALAXY':
         wave = np.arange(3500./(1.+1.85), 11000.+dw/2., dw)
         flux, subtype = get_galaxies(args.nb,wave,args.seed)
+    elif args.spectype=='QSO':
+        wave = np.arange(3500./(1.+9.), 11000.+dw/2., dw)
+        flux, subtype = get_quasars(args.nb,wave,args.seed)
 
     ###
     chi2 = compute_chi2(flux)
