@@ -165,8 +165,8 @@ def get_quasars(nb,wave,seed):
     data['QSO']['NB'] = nb
 
     tseed = seed
-    data['QSO']['FLUX'], data['QSO']['WAVE'], data['QSO']['META'] = SIMQSO(restframe=True).make_templates(nmodel=data['QSO']['NB'],
-        zrange=(0., 7.),nocolorcuts=True,seed=tseed, lyaforest=True)
+    data['QSO']['FLUX'], data['QSO']['WAVE'], data['QSO']['META'] = SIMQSO(basewave_max=10e4).make_templates(nmodel=data['QSO']['NB'],
+        zrange=(0., 7.),nocolorcuts=True,seed=tseed, lyaforest=False, noresample=True)
 
     ###
     nTot = np.sum([ data[k]['NB'] for k in list(data.keys()) ])
@@ -178,7 +178,7 @@ def get_quasars(nb,wave,seed):
     for k in list(data.keys()):
         for j in range(data[k]['NB']):
             subtype[i] = ''
-            flux[i] = resample_flux(wave, data[k]['WAVE'], data[k]['FLUX'][j])
+            flux[i] = resample_flux(wave, data[k]['WAVE']/(1.+data[k]['META']['REDSHIFT'][j]), data[k]['FLUX'][j], extrapolate=True)
             i += 1
     flux /= np.median(flux,axis=1)[:,None]
 
