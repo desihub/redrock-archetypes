@@ -6,33 +6,11 @@ import argparse
 import astropy.io.fits as pyfits
 
 from desispec.interpolation import resample_flux
-from desisim.archetypes import ArcheTypes
+from desisim.archetypes import ArcheTypes, compute_chi2
 import redrock
 from redrock._zscan import _zchi2_one
 
-def compute_chi2(flux):
-    """Compute the chi2 between all the input spectra
 
-    Args:
-        flux (float array): Array (nSpec,nPixel) with each spectra on the same
-            wavenlength grid
-    Returns:
-        chi2 (float array): Chi2 (nSpec,nSpec) between all spectra
-
-    """
-
-    nspec, npix = flux.shape
-
-    chi2 = np.zeros((nspec, nspec))
-    flux *= np.sqrt(npix/np.sum(flux**2,axis=1))[:,None]
-
-    for ii in range(nspec):
-        if ii%50==0: print('Computing chi2 matrix {} over {}'.format(ii,nspec))
-        amp1 = np.sum(flux[ii]*flux,axis=1)/npix
-        chi2[ii,:] = npix*(1.-amp1**2)
-    np.fill_diagonal(chi2,0.)
-
-    return chi2
 def get_spec(plate,mjd,fiber,in_dir,lmin,lmax):
     """ Read a SDSS spectrum
 
@@ -160,7 +138,7 @@ if __name__ == '__main__':
     flux /= np.median(flux,axis=1)[:,None]
 
     ###
-    chi2 = compute_chi2(flux)
+    chi2, amp = compute_chi2(flux)
     Arch = ArcheTypes(chi2)
     iarch, resp, respindx = Arch.get_archetypes(chi2_thresh=args.chi2_thresh, responsibility=True)
     print('Generated {} archetypes.'.format(iarch.size))
