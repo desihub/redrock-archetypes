@@ -70,13 +70,13 @@ def get_stars(nb,wave,seed,SDSS_stellar_templates):
         h.close()
 
     tseed = seed
-    data['STAR']['FLUX'], data['STAR']['WAVE'], data['STAR']['META'] = STAR().make_templates(data['STAR']['NB'], restframe=True,seed=tseed)
+    data['STAR']['FLUX'], data['STAR']['WAVE'], data['STAR']['META'], data['STAR']['OBJMETA'] = STAR().make_templates(data['STAR']['NB'], restframe=True,seed=tseed)
 
     tseed = seed+data['STAR']['NB']
-    data['WD:DA']['FLUX'], data['WD:DA']['WAVE'], data['WD:DA']['META'] = WD(subtype='DA').make_templates(data['WD:DA']['NB'], restframe=True,seed=tseed)
+    data['WD:DA']['FLUX'], data['WD:DA']['WAVE'], data['WD:DA']['META'], data['WD:DA']['OBJMETA'] = WD(subtype='DA').make_templates(data['WD:DA']['NB'], restframe=True,seed=tseed)
 
     tseed = seed+data['STAR']['NB']+data['WD:DA']['NB']
-    data['WD:DB']['FLUX'], data['WD:DB']['WAVE'], data['WD:DB']['META'] = WD(subtype='DB').make_templates(data['WD:DB']['NB'], restframe=True,seed=tseed)
+    data['WD:DB']['FLUX'], data['WD:DB']['WAVE'], data['WD:DB']['META'], data['WD:DB']['OBJMETA'] = WD(subtype='DB').make_templates(data['WD:DB']['NB'], restframe=True,seed=tseed)
 
     ###
     nTot = np.sum([ data[k]['NB'] for k in list(data.keys()) ])
@@ -88,7 +88,7 @@ def get_stars(nb,wave,seed,SDSS_stellar_templates):
     for k in list(data.keys()):
         for j in range(data[k]['NB']):
             if k=='STAR':
-                subtype[i] = subtype_star(data[k]['META'][j]['TEFF'])
+                subtype[i] = subtype_star(data[k]['OBJMETA'][j]['TEFF'])
             else:
                 subtype[i] = k
             flux[i] = resample_flux(wave, data[k]['WAVE'], data[k]['FLUX'][j], extrapolate=True)
@@ -121,13 +121,13 @@ def get_galaxies(nb,wave,seed):
     data['BGS']['NB'] = nb-data['ELG']['NB']-data['LRG']['NB']
 
     tseed = seed
-    data['ELG']['FLUX'], data['ELG']['WAVE'], data['ELG']['META'] = ELG().make_templates(data['ELG']['NB'],restframe=True,nocolorcuts=True,seed=tseed)
+    data['ELG']['FLUX'], data['ELG']['WAVE'], data['ELG']['META'], data['ELG']['OBJMETA'] = ELG().make_templates(data['ELG']['NB'],restframe=True,nocolorcuts=True,seed=tseed)
 
     tseed = seed+data['ELG']['NB']
-    data['LRG']['FLUX'], data['LRG']['WAVE'], data['LRG']['META'] = LRG().make_templates(data['LRG']['NB'],restframe=True,nocolorcuts=True,seed=tseed)
+    data['LRG']['FLUX'], data['LRG']['WAVE'], data['LRG']['META'], data['LRG']['OBJMETA'] = LRG().make_templates(data['LRG']['NB'],restframe=True,nocolorcuts=True,seed=tseed)
 
     tseed = seed+data['ELG']['NB']+data['LRG']['NB']
-    data['BGS']['FLUX'], data['BGS']['WAVE'], data['BGS']['META'] = BGS().make_templates(data['BGS']['NB'],restframe=True,nocolorcuts=True,seed=tseed)
+    data['BGS']['FLUX'], data['BGS']['WAVE'], data['BGS']['META'], data['BGS']['OBJMETA'] = BGS().make_templates(data['BGS']['NB'],restframe=True,nocolorcuts=True,seed=tseed)
 
     ###
     nTot = np.sum([ data[k]['NB'] for k in list(data.keys()) ])
@@ -165,7 +165,7 @@ def get_quasars(nb,wave,seed):
     data['QSO']['NB'] = nb
 
     tseed = seed
-    data['QSO']['FLUX'], data['QSO']['WAVE'], data['QSO']['META'] = SIMQSO(basewave_max=10e4).make_templates(nmodel=data['QSO']['NB'],
+    data['QSO']['FLUX'], data['QSO']['WAVE'], data['QSO']['META'], data['QSO']['OBJMETA'] = SIMQSO(basewave_max=10e4).make_templates(nmodel=data['QSO']['NB'],
         zrange=(0., 7.),nocolorcuts=True,seed=tseed, lyaforest=False, noresample=True)
 
     ###
